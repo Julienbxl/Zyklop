@@ -7,7 +7,7 @@ Compatible with [snarkjs](https://github.com/iden3/snarkjs) `.zkey` and `.wtns` 
 
 ## Benchmarks
 
-RTX 5060 (WSL2/Ubuntu 24.04) vs [icicle-snark](https://github.com/ingonyama-zk/icicle-snark/tree/main/crates/cuda-groth16)
+RTX 5060 (WSL2/Ubuntu 24.04) vs [icicle-snark](https://github.com/ingonyama-zk/icicle-snark/)
 on the same machine — the GPU Groth16 backend of the project that
 [claims to be the fastest Groth16 implementation in the world](https://medium.com/@ingonyama/icicle-snark-the-fastest-groth16-implementation-in-the-world-00901b39a21f).
 Times are end-to-end wall-clock (cold = first run, hot = second run, OS file cache warm).
