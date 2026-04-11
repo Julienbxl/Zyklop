@@ -1,0 +1,35 @@
+{
+  "name": "zyklop-prover",
+  "version": "1.0.0",
+  "description": "High-performance CUDA GPU prover for BN254 Groth16 zero-knowledge proofs.",
+  "main": "index.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "make test",
+    "bench": "make bench"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/julienbxl/zyklop.git"
+  },
+  "keywords": [
+    "zk-snarks",
+    "groth16",
+    "cuda",
+    "gpu",
+    "zero-knowledge",
+    "bn254",
+    "prover"
+  ],
+  "author": "Julienbxl",
+  "license": "BUSL-1.1",
+  "dependencies": {
+    "circomlib": "^2.0.5",
+    "snarkjs": "^0.7.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
