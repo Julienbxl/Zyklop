@@ -7,20 +7,20 @@ Compatible with [snarkjs](https://github.com/iden3/snarkjs) `.zkey` and `.wtns` 
 
 ## Benchmarks
 
-RTX 5060 (WSL2/Ubuntu 24.04) vs [icicle-snark](https://github.com/ingonyama-zk/icicle-snark/)
-on the same machine — the GPU Groth16 backend of the project that
-[claims to be the fastest Groth16 implementation in the world](https://medium.com/@ingonyama/icicle-snark-the-fastest-groth16-implementation-in-the-world-00901b39a21f).
-Times are end-to-end wall-clock (cold = first run, hot = second run, OS file cache warm).
+Hardware setup: **NVIDIA RTX 5060 8GB** (GPU) + **Intel Core i5-14400F** (CPU) running on WSL2/Ubuntu 24.04.
 
-| Circuit | Constraints | Zyklop cold | Zyklop hot | icicle-snark hot | Speedup (hot) |
-|---------|-------------|-------------|------------|-----------------|---------------|
-| Poseidon x5000 | ~1.2M | 2.19 s | **1.55 s** | 9.38 s | **×6.0** |
-| SHA-256 x50 | ~3M | 3.00 s | **1.86 s** | 1.49 s | ×0.8 |
-| ECDSA verify x4 | ~6M | 6.92 s | **4.39 s** | 13.91 s | **×3.2** |
-| Keccak-256 x40 | ~9.5M | 12.82 s | **11.72 s** | FAIL | — |
+Zyklop is benchmarked against two industry standards:
+1. [icicle-snark](https://github.com/ingonyama-zk/icicle-snark/tree/main/crates/cuda-groth16): The GPU Groth16 backend of the project that [claims to be the fastest Groth16 implementation in the world](https://medium.com/@ingonyama/icicle-snark-the-fastest-groth16-implementation-in-the-world-00901b39a21f).
+2. [RapidSNARK](https://github.com/iden3/rapidsnark): The reference high-performance x86 CPU prover by iden3.
 
-Zyklop wins on all large circuits (>3M constraints) and is the only prover that handles Keccak x40 on this hardware.
-icicle-snark is faster on SHA-256 x50; both provers are entirely GPU-based.
+*Times are end-to-end wall-clock "hot" runs (second run, OS file cache warm).*
+
+| Circuit | Constraints | Zyklop (GPU) | icicle-snark (GPU) | RapidSNARK (CPU) |
+|---------|-------------|--------------|--------------------|------------------|
+| Poseidon x5000 | ~1.2M | **1.55 s** | 9.38 s | 10.08 s |
+| SHA-256 x50 | ~3M | 1.86 s | **1.49 s** | 5.58 s |
+| ECDSA verify x4 | ~6M | **4.39 s** | 13.91 s | 18.15 s |
+| Keccak-256 x40 | ~9.5M | **11.72 s** | FAIL | 34.95 s | 
 
 ## Requirements
 
@@ -37,146 +37,3 @@ make                        # default: sm_120 (RTX 5060/5090)
 make ARCH=sm_89             # RTX 4090
 make ARCH=sm_86             # RTX 3090
 make ARCH=sm_90             # H100
-```
-
-## Usage
-
-```bash
-# Prove
-./build/prover <circuit.zkey> <witness.wtns> <proof.json> <public.json>
-
-# Verify (requires snarkjs)
-snarkjs groth16 verify <verification_key.json> <public.json> <proof.json>
-```
-
-## Unit Tests
-
-```bash
-make test
-```
-
-Runs GPU unit tests for Fp, Fr, NTT, MSM G1 and MSM G2 against pre-computed JSON test vectors.
-
-## Benchmark Circuits
-
-The four benchmark circuits are included in `test/` with their `circuit.circom` and `input.json`.
-To generate the `.zkey`, witness, and verification key, run:
-
-```bash
-# Step 1 — download third-party circuit sources
-npm install
-
-# Step 2 — download circom library deps (only needed for ecdsa4 and keccak40)
-bash scripts/download_circom_libs.sh
-
-# Step 3 — generate zkey + witness for one or all circuits
-bash scripts/setup_benchmarks.sh poseidon5000   # ~1.2M constraints, ~5 min
-bash scripts/setup_benchmarks.sh 50blocks       # ~3M constraints, ~30 min
-bash scripts/setup_benchmarks.sh ecdsa4         # ~6M constraints, ~1 h, heavy RAM
-bash scripts/setup_benchmarks.sh keccak40       # ~9.5M constraints, ~2 h, needs pot24
-```
-
-PTAU files are downloaded automatically to `ptau/` on first use (~9 GB for pot24).
-
-Once setup is done:
-
-```bash
-./build/prover test/poseidon_5000/circuit_final.zkey \
-               test/poseidon_5000/witness.wtns \
-               /tmp/proof.json /tmp/public.json
-
-snarkjs groth16 verify test/poseidon_5000/verification_key.json \
-                       /tmp/public.json /tmp/proof.json
-```
-
-## Repository Structure
-
-```
-include/              CUDA headers — field arithmetic, NTT, MSM, Groth16 API
-  fp_bn254.cuh        Fp arithmetic (Montgomery, PTX CIOS)
-  fr_bn254.cuh        Fr arithmetic (Montgomery, PTX CIOS)
-  fp2_bn254.cuh       Fp2 arithmetic for G2
-  ptx_bn254.h         Shared PTX primitives (add/sub/mul with carry chains)
-  ntt_bn254.cuh       Stockham radix-2 NTT over Fr
-  msm_g1.cuh          G1 Pippenger MSM (C=17, signed digits, three-level buckets)
-  msm_g2.cuh          G2 Pippenger MSM
-  groth16.cuh         Public API
-
-src/
-  groth16.cu          GPU prover pipeline
-  main.cu             CLI entry point
-  binfile_utils.*     snarkjs BinFile parser (fork of iden3/rapidsnark, LGPL-3)
-  zkey_utils.*        zkey section reader
-  wtns_utils.*        witness file reader
-
-test/
-  unit/               Unit test sources + JSON test vectors
-  poseidon_5000/      circuit.circom + input.json
-  sha256_50blocks/    circuit.circom + input.json
-  ecdsa_4x/           circuit.circom + input.json
-  keccak_40/          circuit.circom + input.json
-
-scripts/
-  download_circom_libs.sh      Download circom library deps (circom-ecdsa, keccak256-circom)
-  setup_benchmarks.sh          Compile circuits + generate zkey + witness
-  gen_input_poseidon.py
-  gen_input_keccak_batch.py
-  gen_input_ecdsa_batch.py
-  gen_input_sha256.py          SHA-256 input generator
-
-docs/
-  ZKEY_FORMAT.md      Reverse-engineered snarkjs zkey binary format
-```
-
-## Implementation Notes
-
-**Field arithmetic** (`fp_bn254.cuh`, `fr_bn254.cuh`): BN254 Fp and Fr in Montgomery
-form. CIOS (Coarsely Integrated Operand Scanning) via inline PTX. All GPU kernels stay
-in Montgomery representation throughout; conversion to canonical form happens only at
-output time.
-
-**NTT** (`ntt_bn254.cuh`): Stockham radix-2, self-sorting (no bit-reversal), up to
-2^24 elements. Coset generator is `omega_{2n} = 5^{(r-1)/(2n)} mod r` (snarkjs
-convention), read from the pre-built twiddle table to avoid per-kernel computation.
-
-**MSM** (`msm_g1.cuh`): Pippenger with C=17 signed-digit windows, CUB histogram +
-prefix-sum + scatter, three-level bucket accumulation (small/medium/large), and
-chunked reduce. C=17 keeps almost all buckets in the `small` path (~40 pts/bucket)
-which is optimal for the RTX 5060.
-
-**Groth16 pipeline** (`groth16.cu`): OpenMP fast-parse of section 4 with pinned
-double-buffering, A and B SpMV on separate CUDA streams, CRS upload async-overlapped
-with H polynomial computation, C/H uploads async-overlapped with pi_A and pi_B.
-
-**zkey encoding quirks** documented in `docs/ZKEY_FORMAT.md`:
-- Section 4 coefficients are stored as `coef * R²` (double-Montgomery), not canonical.
-- Section 9 H-points are `tau^{2i+1} / delta` (odd powers), no Z division.
-- MSM scalars for pi_A and pi_B require explicit prepending of `alpha1`/`beta2`.
-
-## Environment Variables
-
-```bash
-ZK_G1_DEBUG=1          # print per-phase G1 MSM timings and bucket statistics
-ZK_G1_DEBUG=2          # also print per-window summaries
-ZK_G1_SMALL_THRESH=N   # small/medium bucket boundary (default: 600 for C=17)
-ZK_G1_MEDIUM_THRESH=N  # medium/large boundary (default: 0 for C=17)
-ZK_G1_LARGE_BLK=N      # threads per block for large buckets (default: 64)
-ZK_G2_DEBUG=1          # print per-phase G2 MSM timings and bucket statistics
-ZK_G2_LARGE_BLK=N      # threads per block for G2 large buckets
-ZK_HPIPE_DEBUG=1       # print H polynomial pipeline timing breakdown
-```
-
-## License
-
-Copyright (c) 2025 Julienbxl
-
-This software is released under the **Business Source License 1.1 (BUSL-1.1)**. 
-You may copy, modify, and use this software for non-commercial, educational, and testing purposes. 
-**Commercial and production use of this software is strictly prohibited** without a prior commercial agreement. 
-
-The Business Source License will automatically convert to the GNU General Public License v3.0 (GPL-3.0) on January 1st, 2029. 
-See the [LICENSE](LICENSE) file for the full text.
-
----
-**Third-party code:**
-The file parsers in `src/binfile_utils.*`, `src/zkey_utils.*`, and `src/wtns_utils.*` are adapted from [iden3/rapidsnark](https://github.com/iden3/rapidsnark) and remain licensed under the GNU Lesser General Public License v3.0 (LGPL-3.0).
